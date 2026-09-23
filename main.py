@@ -2,7 +2,6 @@ import os
 import time
 import requests
 import pandas as pd
-import pandas_ta as ta
 from flask import Flask
 from threading import Thread
 
@@ -16,7 +15,6 @@ def home():
     return "Bot Donchian Breakout đang hoạt động 24/7!"
 
 def run_server():
-    # Render sẽ tự cấp cổng qua biến môi trường PORT (mặc định 8080 nếu chạy local)
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -37,7 +35,6 @@ EMA_FILTER_PERIOD = 200
 VOLUME_MA_PERIOD = 20
 VOLUME_MULTIPLIER = 1.2
 
-# Trạng thái giả lập vị thế (None, "LONG", "SHORT")
 current_position = None
 
 def send_discord(message):
@@ -75,23 +72,21 @@ def analyze_and_trade():
     if df is None or df.empty:
         return
 
-    # Tính toán các chỉ báo kỹ thuật
-    df['ema200'] = ta.ema(df['close'], length=EMA_FILTER_PERIOD)
-    donchian = ta.donchian(df['high'], df['low'], lower_length=DONCHIAN_PERIOD, upper_length=DONCHIAN_PERIOD)
+    # Tính EMA 200 bằng pandas thuần
+    df['ema200'] = df['close'].ewm(span=EMA_FILTER_PERIOD, adjust=False).mean()
     
-    # Tìm đúng tên cột Donchian Channel
-    dc_upper_col = [c for c in donchian.columns if c.startswith('DCU')][0]
-    dc_lower_col = [c for c in donchian.columns if c.startswith('DCL')][0]
+    # Tính Donchian Channels bằng pandas thuần
+    df['dc_upper'] = df['high'].rolling(window=DONCHIAN_PERIOD).max()
+    df['dc_lower'] = df['low'].rolling(window=DONCHIAN_PERIOD).min()
     
-    df['dc_upper'] = donchian[dc_upper_col]
-    df['dc_lower'] = donchian[dc_lower_col]
-    df['vol_ma'] = ta.sma(df['volume'], length=VOLUME_MA_PERIOD)
+    # Tính MA Volume bằng pandas thuần
+    df['vol_ma'] = df['volume'].rolling(window=VOLUME_MA_PERIOD).mean()
 
     # Lấy giá trị của nến đã đóng gần nhất (nến -2)
     last_close = df['close'].iloc[-2]
     last_ema200 = df['ema200'].iloc[-2]
-    prev_upper = df['dc_upper'].iloc[-3]  # Upper channel nến trước đó
-    prev_lower = df['dc_lower'].iloc[-3]  # Lower channel nến trước đó
+    prev_upper = df['dc_upper'].iloc[-3]
+    prev_lower = df['dc_lower'].iloc[-3]
     last_vol = df['volume'].iloc[-2]
     last_vol_ma = df['vol_ma'].iloc[-2]
 
@@ -112,17 +107,9 @@ def analyze_and_trade():
         msg = f"🔻 **TÍN HIỆU BÁN (SHORT) - {SYMBOL} ({TIMEFRAME})**\n- Giá đóng cửa: {last_close}\n- EMA200: {last_ema200:.2f}\n- Donchian Lower: {prev_lower}\n- Khối lượng: Đạt chuẩn (>120% MA20)"
         send_discord(msg)
 
-# ==========================================
-# 3. CHƯƠNG TRÌNH CHÍNH
-# ==========================================
 if __name__ == '__main__':
-    # Khởi chạy Web Server chạy ngầm
     keep_alive()
-    
-    # Gửi thông báo khởi động lên Discord
-    send_discord("🤖 **Bot Trading Donchian Breakout đã khởi động thành công trên Web Server!**")
-    
-    # Vòng lặp quét tín hiệu liên tục (mỗi 15 phút quét 1 lần)
+    send_discord("🤖 **Bot Trading Donchian Breakout đã khởi động thành công trên Render!**")
     while True:
         try:
             analyze_and_trade()
