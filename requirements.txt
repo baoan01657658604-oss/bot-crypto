@@ -1,6 +1,4 @@
 requests
 pandas
-numpy
-pandas-ta
 flask
 gunicorn
